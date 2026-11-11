@@ -39,8 +39,8 @@ jobs:
         run: |
           cp App.js pochette/App.js
           cp app.json pochette/app.json
-          rm -rf pochette/assets
-          cp -r assets pochette/assets
+          mkdir -p pochette/assets
+          cp icon.png adaptive-icon.png pochette/assets/
 
       - name: Générer le projet Android
         working-directory: pochette
