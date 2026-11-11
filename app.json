@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Pochette",
+    "slug": "pochette",
+    "version": "1.0.0",
+    "orientation": "default",
+    "scheme": "pochette",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "icon": "./assets/icon.png",
+    "android": {
+      "package": "com.pochette.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b0b0b"
+      }
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}
