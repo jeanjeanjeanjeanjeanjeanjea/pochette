@@ -1,0 +1,63 @@
+name: Compiler l'APK Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Créer le projet Expo
+        run: npx --yes create-expo-app@latest pochette --template blank --yes
+
+      - name: Installer les modules
+        working-directory: pochette
+        run: npx expo install expo-auth-session expo-crypto expo-secure-store expo-web-browser expo-keep-awake expo-status-bar expo-linking expo-constants
+
+      - name: Ajouter nos fichiers
+        run: |
+          cp App.js pochette/App.js
+          cp app.json pochette/app.json
+          rm -rf pochette/assets
+          cp -r assets pochette/assets
+
+      - name: Générer le projet Android
+        working-directory: pochette
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Compiler l'APK
+        working-directory: pochette/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Préparer le fichier
+        run: cp pochette/android/app/build/outputs/apk/release/app-release.apk Pochette.apk
+
+      - name: Publier l'APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Pochette (version ${{ github.run_number }})
+          files: Pochette.apk
