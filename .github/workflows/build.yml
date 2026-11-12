@@ -41,7 +41,10 @@ jobs:
           cp app.json pochette/app.json
           mkdir -p pochette/assets
           cp icon.png adaptive-icon.png pochette/assets/
-          cp -r modules pochette/modules
+          # Le code Android peut être envoyé en dossier « modules » ou en fichier « modules.zip »
+          if [ -f modules.zip ]; then unzip -q -o modules.zip -d pochette/; fi
+          if [ -d modules ]; then cp -r modules pochette/; fi
+          test -f pochette/modules/pochette-native/expo-module.config.json || { echo "Dossier modules introuvable : envoie modules.zip à la racine du dépôt"; exit 1; }
 
       - name: Générer le projet Android
         working-directory: pochette
@@ -62,4 +65,3 @@ jobs:
           tag_name: apk-${{ github.run_number }}
           name: Pochette (version ${{ github.run_number }})
           files: Pochette.apk
-        
