@@ -31,6 +31,14 @@ const DEFAULT_PREFS = {
   showInfo: true,
   showProgress: true,
   showClock: false,
+  clockPosition: 'info', // info | top
+  clockSize: 'M',        // S | M | L | XL
+  clockWeight: 'thin',   // thin | regular | bold
+  clockFont: 'default',  // default | serif | mono | condensed
+  clockColor: '#ffffff',
+  clockSeconds: false,
+  clockDate: false,
+  clock12h: false,
   bgStyle: 'blur',     // blur | black | cover
   corners: 'round',    // round | square
   accent: '#ffffff',
@@ -106,19 +114,70 @@ function CrossfadeImage({ uri, style, blurRadius }) {
   );
 }
 
-function Clock({ style }) {
+const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const CLOCK_SIZES = { S: 32, M: 48, L: 68, XL: 92 };
+const CLOCK_WEIGHTS = { thin: '200', regular: '400', bold: '700' };
+const CLOCK_FONTS = { default: undefined, serif: 'serif', mono: 'monospace', condensed: 'sans-serif-condensed' };
+
+function Clock({ p, scale = 1, align = 'center' }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
+    const unit = p.clockSeconds ? 1000 : 60000;
     let t;
     const schedule = () => {
-      t = setTimeout(() => { setNow(new Date()); schedule(); }, 60000 - (Date.now() % 60000) + 50);
+      t = setTimeout(() => { setNow(new Date()); schedule(); }, unit - (Date.now() % unit) + 30);
     };
+    setNow(new Date());
     schedule();
     return () => clearTimeout(t);
-  }, []);
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  return <Text style={style}>{hh}:{mm}</Text>;
+  }, [p.clockSeconds]);
+
+  const pad = (n) => String(n).padStart(2, '0');
+  let h = now.getHours();
+  let suffix = '';
+  if (p.clock12h) { suffix = h < 12 ? ' AM' : ' PM'; h = h % 12 || 12; }
+  const time = `${p.clock12h ? h : pad(h)}:${pad(now.getMinutes())}${p.clockSeconds ? `:${pad(now.getSeconds())}` : ''}`;
+  const date = `${DAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+  const size = (CLOCK_SIZES[p.clockSize] || 48) * scale;
+  const fontFamily = CLOCK_FONTS[p.clockFont];
+  const color = p.clockColor || '#ffffff';
+
+  return (
+    <View style={{ alignItems: align === 'left' ? 'flex-start' : 'center', marginBottom: 8 }}>
+      <Text
+        style={{
+          color, fontSize: size, lineHeight: size * 1.15, fontFamily,
+          fontWeight: CLOCK_WEIGHTS[p.clockWeight] || '200', fontVariant: ['tabular-nums'],
+        }}
+      >
+        {time}
+        {!!suffix && <Text style={{ fontSize: size * 0.35 }}>{suffix}</Text>}
+      </Text>
+      {p.clockDate && (
+        <Text style={{ color, opacity: 0.75, fontSize: Math.max(13, size * 0.28), fontFamily, marginTop: 2 }}>
+          {date}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function ColorRow({ label, value, onChange }) {
+  return (
+    <View style={{ paddingVertical: 8 }}>
+      <Text style={s.rowText}>{label}</Text>
+      <View style={s.chips}>
+        {ACCENTS.map((c) => (
+          <TouchableOpacity
+            key={c}
+            onPress={() => onChange(c)}
+            style={[s.swatch, { backgroundColor: c }, value === c && s.swatchOn]}
+          />
+        ))}
+      </View>
+    </View>
+  );
 }
 
 function Section({ title, children }) {
@@ -194,6 +253,7 @@ export default function App() {
   const [offline, setOffline] = useState(false);
   const [prefs, setPrefs] = useState(DEFAULT_PREFS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('display');
   const [uiVisible, setUiVisible] = useState(true);
   const [aod, setAod] = useState(false);
   const [appActive, setAppActive] = useState(AppState.currentState !== 'background');
@@ -454,86 +514,123 @@ export default function App() {
     const ns = native.settings || {};
     const ready = stage === 'ready';
     const np = native.nowPlaying;
+    const tabs = [
+      ...(ready ? [['display', 'Affichage'], ['clock', 'Horloge'], ['screen', 'Écran']] : []),
+      ...(Native ? [['phone', 'Téléphone']] : []),
+      ['account', 'Compte'],
+    ];
+    const tab = tabs.some(([k]) => k === settingsTab) ? settingsTab : tabs[0][0];
+    const close = () => setSettingsOpen(false);
+
     return (
-      <Modal visible={settingsOpen} transparent animationType="fade" onRequestClose={() => setSettingsOpen(false)} statusBarTranslucent>
-        <Pressable style={[s.backdrop, s.center]} onPress={() => setSettingsOpen(false)}>
-          <Pressable style={[s.card, { maxHeight: '92%', padding: 0 }]} onPress={() => {}}>
-            <ScrollView contentContainerStyle={{ padding: 22 }}>
-              <Text style={s.h1}>Réglages</Text>
+      <Modal visible={settingsOpen} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
+        <View style={[s.backdrop, s.center]}>
+          {/* Le fond capte le toucher pour fermer ; la carte, elle, laisse défiler */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={close} />
+          <View style={[s.card, s.settingsCard]}>
+            <Text style={s.h1}>Réglages</Text>
+            <View style={s.tabs}>
+              {tabs.map(([k, l]) => (
+                <TouchableOpacity key={k} onPress={() => setSettingsTab(k)} style={[s.tab, tab === k && s.tabOn]}>
+                  <Text style={[s.tabText, tab === k && s.tabTextOn]}>{l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-              {ready && (
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
+              {tab === 'display' && (
                 <>
-                  <Section title="Affichage">
-                    <Toggle label="Titre et artiste" value={prefs.showInfo} onChange={(v) => updatePref('showInfo', v)} />
-                    <Toggle label="Barre de progression" value={prefs.showProgress} onChange={(v) => updatePref('showProgress', v)} />
-                    <Toggle label="Horloge" value={prefs.showClock} onChange={(v) => updatePref('showClock', v)} />
-                    <Choice
-                      label="Fond"
-                      value={prefs.bgStyle}
-                      onChange={(v) => updatePref('bgStyle', v)}
-                      options={[['blur', 'Flou'], ['black', 'Noir'], ['cover', 'Pochette en grand']]}
-                    />
-                    <Choice
-                      label="Coins de la pochette"
-                      value={prefs.corners}
-                      onChange={(v) => updatePref('corners', v)}
-                      options={[['round', 'Arrondis'], ['square', 'Carrés']]}
-                    />
-                    <View style={{ paddingVertical: 8 }}>
-                      <Text style={s.rowText}>Couleur d'accent</Text>
-                      <View style={s.chips}>
-                        {ACCENTS.map((c) => (
-                          <TouchableOpacity
-                            key={c}
-                            onPress={() => updatePref('accent', c)}
-                            style={[s.swatch, { backgroundColor: c }, prefs.accent === c && s.swatchOn]}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  </Section>
-
-                  <Section title="Écran">
-                    <Toggle label="Mode nuit" hint="Assombrit tout l'affichage" value={prefs.nightMode} onChange={(v) => updatePref('nightMode', v)} />
-                    <Toggle label="Protection anti-marquage" hint="Décale l'image de quelques pixels" value={prefs.antiBurnIn} onChange={(v) => updatePref('antiBurnIn', v)} />
-                    <ActionButton label="Lancer le mode Always-On" onPress={enterAod} />
-                    <Text style={s.hint}>Écran noir, horloge et pochette, luminosité minimale. Touche l'écran pour quitter.</Text>
-                  </Section>
+                  <Toggle label="Titre et artiste" value={prefs.showInfo} onChange={(v) => updatePref('showInfo', v)} />
+                  <Toggle label="Barre de progression" value={prefs.showProgress} onChange={(v) => updatePref('showProgress', v)} />
+                  <Choice
+                    label="Fond"
+                    value={prefs.bgStyle}
+                    onChange={(v) => updatePref('bgStyle', v)}
+                    options={[['blur', 'Flou'], ['black', 'Noir'], ['cover', 'Pochette en grand']]}
+                  />
+                  <Choice
+                    label="Coins de la pochette"
+                    value={prefs.corners}
+                    onChange={(v) => updatePref('corners', v)}
+                    options={[['round', 'Arrondis'], ['square', 'Carrés']]}
+                  />
+                  <ColorRow label="Couleur de la barre de progression" value={prefs.accent} onChange={(c) => updatePref('accent', c)} />
                 </>
               )}
 
-              {Native && (
-                <Section title="Téléphone (fond d'écran, widgets, veille)">
+              {tab === 'clock' && (
+                <>
+                  <View style={s.preview}>
+                    <Clock p={prefs} scale={Math.min(1, 220 / ((CLOCK_SIZES[prefs.clockSize] || 48) * 4))} />
+                  </View>
+                  <Toggle label="Afficher l'horloge" value={prefs.showClock} onChange={(v) => updatePref('showClock', v)} />
+                  <Choice
+                    label="Position"
+                    value={prefs.clockPosition}
+                    onChange={(v) => updatePref('clockPosition', v)}
+                    options={[['info', 'Avec le titre'], ['top', 'En haut de l\'écran']]}
+                  />
+                  <Choice
+                    label="Taille"
+                    value={prefs.clockSize}
+                    onChange={(v) => updatePref('clockSize', v)}
+                    options={[['S', 'Petite'], ['M', 'Moyenne'], ['L', 'Grande'], ['XL', 'Très grande']]}
+                  />
+                  <Choice
+                    label="Épaisseur"
+                    value={prefs.clockWeight}
+                    onChange={(v) => updatePref('clockWeight', v)}
+                    options={[['thin', 'Fine'], ['regular', 'Normale'], ['bold', 'Grasse']]}
+                  />
+                  <Choice
+                    label="Police"
+                    value={prefs.clockFont}
+                    onChange={(v) => updatePref('clockFont', v)}
+                    options={[['default', 'Standard'], ['condensed', 'Étroite'], ['serif', 'Classique'], ['mono', 'Machine à écrire']]}
+                  />
+                  <ColorRow label="Couleur" value={prefs.clockColor} onChange={(c) => updatePref('clockColor', c)} />
+                  <Toggle label="Secondes" value={prefs.clockSeconds} onChange={(v) => updatePref('clockSeconds', v)} />
+                  <Toggle label="Date" value={prefs.clockDate} onChange={(v) => updatePref('clockDate', v)} />
+                  <Toggle label="Format 12 h (AM/PM)" value={prefs.clock12h} onChange={(v) => updatePref('clock12h', v)} />
+                  <Text style={s.hint}>Le mode Always-On utilise aussi cette horloge.</Text>
+                </>
+              )}
+
+              {tab === 'screen' && (
+                <>
+                  <Toggle label="Mode nuit" hint="Assombrit tout l'affichage" value={prefs.nightMode} onChange={(v) => updatePref('nightMode', v)} />
+                  <Toggle label="Protection anti-marquage" hint="Décale l'image de quelques pixels" value={prefs.antiBurnIn} onChange={(v) => updatePref('antiBurnIn', v)} />
+                  <ActionButton label="Lancer le mode Always-On" onPress={enterAod} />
+                  <Text style={[s.hint, { marginTop: 8 }]}>Écran noir, horloge et pochette, luminosité minimale. Touche l'écran pour quitter.</Text>
+                </>
+              )}
+
+              {tab === 'phone' && Native && (
+                <>
                   {!native.access ? (
                     <>
                       <Text style={s.p}>
-                        Pour suivre la musique même quand Pochette est fermée, Android demande l'« accès aux notifications ».
-                        Pochette ne lit pas tes notifications : elle s'en sert uniquement pour connaître le morceau en cours.
+                        Première étape : autoriser Pochette à suivre ta musique même quand l'appli est fermée
+                        (« accès aux notifications »). Pochette ne lit pas tes notifications, elle s'en sert seulement
+                        pour connaître le morceau en cours.
                       </Text>
                       <ActionButton label="Autoriser l'accès" onPress={() => Native.openNotificationAccessSettings()} />
                       <Text style={[s.hint, { marginTop: 10 }]}>
-                        Si l'interrupteur est grisé : ouvre les infos de l'appli, touche ⋮ en haut à droite puis
+                        Si l'interrupteur est grisé : « Infos de l'appli », touche ⋮ en haut à droite puis
                         « Autoriser les paramètres restreints », et réessaie.
                       </Text>
                       <ActionButton secondary label="Infos de l'appli" onPress={() => Native.openAppDetails()} />
                     </>
                   ) : (
-                    <Text style={s.hint}>
-                      {np ? `Détecté : ${np.title}${np.artist ? ` — ${np.artist}` : ''}` : 'Accès activé. Lance un morceau pour le voir apparaître ici.'}
+                    <Text style={[s.hint, { marginBottom: 6 }]}>
+                      {np ? `✓ Détecté : ${np.title}${np.artist ? ` — ${np.artist}` : ''}` : '✓ Accès activé. Lance un morceau pour le voir apparaître ici.'}
                     </Text>
                   )}
 
-                  <Choice
-                    label="Musique suivie"
-                    value={ns.source}
-                    disabled={!native.access}
-                    onChange={(v) => setNativeSetting({ source: v })}
-                    options={[['spotify', 'Spotify'], ['all', 'Toutes les applis']]}
-                  />
-
+                  <Text style={s.subTitle}>Fond d'écran en direct</Text>
                   <Toggle
-                    label="Fond d'écran en direct"
-                    hint="Change le fond d'écran à chaque nouvelle pochette"
+                    label="Activer"
+                    hint="Ton fond d'écran prend la pochette de chaque nouveau morceau"
                     value={ns.wallpaperEnabled}
                     disabled={!native.access}
                     onChange={(v) => setNativeSetting({ wallpaperEnabled: v })}
@@ -554,28 +651,39 @@ export default function App() {
                   />
                   <ActionButton secondary label="Appliquer maintenant" disabled={!native.access || !ns.wallpaperEnabled} onPress={applyWallpaperNow} />
 
-                  <Text style={[s.rowText, { marginTop: 18 }]}>Widgets</Text>
+                  <Text style={s.subTitle}>Musique suivie</Text>
+                  <Choice
+                    label="Source"
+                    value={ns.source}
+                    disabled={!native.access}
+                    onChange={(v) => setNativeSetting({ source: v })}
+                    options={[['spotify', 'Spotify'], ['all', 'Toutes les applis']]}
+                  />
+
+                  <Text style={s.subTitle}>Widgets</Text>
                   <ActionButton secondary label="Ajouter « Pochette » (carré)" onPress={() => addWidget('cover')} />
                   <ActionButton secondary label="Ajouter « Lecture en cours » (avec boutons)" onPress={() => addWidget('nowplaying')} />
 
-                  <Text style={[s.rowText, { marginTop: 18 }]}>Économiseur d'écran</Text>
+                  <Text style={s.subTitle}>Économiseur d'écran</Text>
                   <Text style={s.hint}>
                     Horloge et pochette sur fond noir pendant que le téléphone charge, même appli fermée.
                     Choisis « Pochette » dans les réglages qui vont s'ouvrir.
                   </Text>
                   <ActionButton secondary label="Ouvrir les réglages de l'économiseur" onPress={() => Native.openScreenSaverSettings()} />
-                </Section>
+                </>
               )}
 
-              <Section title="Compte Spotify">
-                <ActionButton secondary label="Changer le Client ID" onPress={changeClientId} />
-                {stage !== 'setup' && <ActionButton secondary label="Se déconnecter" onPress={logout} />}
-              </Section>
-
-              <ActionButton label="Fermer" onPress={() => setSettingsOpen(false)} />
+              {tab === 'account' && (
+                <>
+                  <ActionButton secondary label="Changer le Client ID" onPress={changeClientId} />
+                  {stage !== 'setup' && <ActionButton secondary label="Se déconnecter" onPress={logout} />}
+                </>
+              )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+
+            <ActionButton label="Fermer" onPress={close} />
+          </View>
+        </View>
       </Modal>
     );
   }
@@ -647,7 +755,7 @@ export default function App() {
       <Pressable style={[s.screen, s.center]} onPress={exitAod}>
         <StatusBar hidden />
         <Animated.View style={[s.center, { transform: shift.getTranslateTransform() }]} pointerEvents="none">
-          <Clock style={s.aodClock} />
+          <View style={{ opacity: 0.8 }}><Clock p={prefs} scale={1.4} /></View>
           {track && track.image ? (
             <Image
               source={{ uri: track.image }}
@@ -668,7 +776,9 @@ export default function App() {
   // ----- Écran principal -----
   const radius = prefs.corners === 'round' ? 10 : 0;
   const immersive = prefs.bgStyle === 'cover';
-  const compact = prefs.showInfo || prefs.showProgress || prefs.showClock;
+  const clockWithInfo = prefs.showClock && prefs.clockPosition !== 'top';
+  const clockOnTop = prefs.showClock && prefs.clockPosition === 'top';
+  const compact = prefs.showInfo || prefs.showProgress || clockWithInfo;
   const coverSize = landscape
     ? (compact ? Math.min(height * 0.8, width * 0.45) : Math.min(height * 0.88, width * 0.9))
     : (compact ? Math.min(width * 0.88, height * 0.55) : Math.min(width * 0.92, height * 0.8));
@@ -677,7 +787,7 @@ export default function App() {
 
   const infoBlock = track && compact ? (
     <>
-      {prefs.showClock && <Clock style={[s.clock, { textAlign }]} />}
+      {clockWithInfo && <Clock p={prefs} align={textAlign} />}
       {prefs.showInfo && (
         <>
           <Text numberOfLines={1} style={[s.title, { textAlign }]}>{track.title}</Text>
@@ -709,9 +819,12 @@ export default function App() {
       ) : null}
 
       <Animated.View style={{ flex: 1, transform: shift.getTranslateTransform() }} pointerEvents="none">
+        {track && clockOnTop && (
+          <View style={s.topClock}><Clock p={prefs} /></View>
+        )}
         {!track ? (
           <View style={[s.center, { flex: 1, padding: 24 }]}>
-            {prefs.showClock && <Clock style={[s.clock, { textAlign: 'center', marginBottom: 24 }]} />}
+            {prefs.showClock && <View style={{ marginBottom: 16 }}><Clock p={prefs} /></View>}
             <Text style={{ fontSize: 56, marginBottom: 12 }}>🎵</Text>
             <Text style={[s.title, { textAlign: 'center' }]}>Lance ta musique sur Spotify</Text>
             <Text style={[s.sub, { marginTop: 6, textAlign: 'center' }]}>La pochette s'affichera ici automatiquement.</Text>
@@ -727,7 +840,7 @@ export default function App() {
             {compact && <View style={s.immersivePanel}>{infoBlock}</View>}
           </View>
         ) : (
-          <View style={[s.center, { flex: 1, flexDirection: landscape ? 'row' : 'column', padding: 20 }]}>
+          <View style={[s.center, { flex: 1, flexDirection: landscape ? 'row' : 'column', padding: 20, paddingTop: clockOnTop ? 40 + (CLOCK_SIZES[prefs.clockSize] || 48) * 1.6 : 20 }]}>
             <View style={[s.coverWrap, { width: coverSize, height: coverSize, borderRadius: radius }]}>
               {track.image ? (
                 <CrossfadeImage uri={track.image} style={{ width: coverSize, height: coverSize, borderRadius: radius }} />
@@ -801,6 +914,15 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
   },
   btnSecondaryText: { color: '#fff', fontSize: 14, textAlign: 'center' },
+  settingsCard: { maxHeight: '92%', paddingBottom: 16 },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10 },
+  tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, marginRight: 6, marginBottom: 6 },
+  tabOn: { backgroundColor: '#1db954' },
+  tabText: { color: '#fff', opacity: 0.75, fontSize: 14 },
+  tabTextOn: { color: '#000', opacity: 1, fontWeight: '700' },
+  subTitle: { color: '#1db954', fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginTop: 20, marginBottom: 2, textTransform: 'uppercase' },
+  preview: { backgroundColor: '#000', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8 },
+  topClock: { position: 'absolute', top: 36, left: 0, right: 0, alignItems: 'center' },
   section: { marginTop: 18, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.15)' },
   sectionTitle: { color: '#1db954', fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
