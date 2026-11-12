@@ -13,7 +13,7 @@ import Native from './modules/pochette-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 const REDIRECT_URI = 'pochette://callback';
 const SCOPES = ['user-read-currently-playing', 'user-read-playback-state'];
 const DISCOVERY = {
@@ -646,6 +646,7 @@ function BluetoothPanel({ visible, onClose }) {
     .filter((d) => !pairedAddrs.has(d.address))
     .sort((a, b) => (AUDIO_KINDS.includes(b.kind) - AUDIO_KINDS.includes(a.kind)) || a.name.localeCompare(b.name));
   const activeCount = paired.filter((d) => d.active).length;
+  const connectedAudio = paired.filter((d) => d.connected && AUDIO_KINDS.includes(d.kind));
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -675,16 +676,72 @@ function BluetoothPanel({ visible, onClose }) {
               </View>
             ) : (
               <>
-                {/* Sortie audio : le geste principal */}
-                <View style={[s.btCard, { borderColor: '#1db954' }]}>
+                {/* État actuel de la sortie audio */}
+                <View style={[s.btCard, { borderColor: activeCount > 1 ? '#1db954' : 'rgba(255,255,255,0.08)' }]}>
                   <Text style={s.btBig}>
-                    {activeCount > 1 ? `🔊 Musique sur ${activeCount} appareils` : activeCount === 1 ? '🔊 Musique sur 1 appareil' : '📱 Musique sur le téléphone'}
+                    {activeCount > 1 ? `✓ Musique sur ${activeCount} enceintes` : activeCount === 1 ? '🔊 Musique sur 1 enceinte' : '📱 Musique sur le téléphone'}
                   </Text>
-                  <ActionButton label="Choisir où jouer la musique" onPress={openOutput} />
+                  {activeCount > 1 && (
+                    <Text style={[s.hint, { marginTop: 6 }]}>
+                      {paired.filter((d) => d.active).map((d) => d.name).join(' + ')}
+                    </Text>
+                  )}
+                  <ActionButton secondary label="Changer d'enceinte (une seule)" onPress={openOutput} />
+                </View>
+
+                {/* Guide : deux enceintes en même temps (Dual Audio de Samsung) */}
+                <View style={[s.btCard, { marginTop: 10 }]}>
+                  <Text style={s.btBig}>🔊🔊  Jouer sur 2 enceintes</Text>
+                  <Text style={[s.hint, { marginTop: 6 }]}>
+                    Les cases pour choisir 2 enceintes se trouvent uniquement dans le panneau de Samsung,
+                    qu'aucune appli ne peut ouvrir à ta place. Ça prend 10 secondes :
+                  </Text>
+
+                  {connectedAudio.length < 2 ? (
+                    <View style={s.stepBox}>
+                      <Text style={s.stepNum}>1</Text>
+                      <Text style={s.stepText}>
+                        Connecte d'abord 2 enceintes : allume-les, elles se reconnectent seules si elles sont déjà appairées
+                        ({connectedAudio.length}/2 connectée{connectedAudio.length > 1 ? 's' : ''}).
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={[s.stepBox, { borderColor: '#1db954' }]}>
+                      <Text style={[s.stepNum, { backgroundColor: '#1db954', color: '#000' }]}>✓</Text>
+                      <Text style={s.stepText}>2 enceintes connectées : {connectedAudio.slice(0, 2).map((d) => d.name).join(' et ')}.</Text>
+                    </View>
+                  )}
+                  <View style={s.stepBox}>
+                    <Text style={s.stepNum}>2</Text>
+                    <Text style={s.stepText}>Glisse <Text style={{ fontWeight: '700' }}>deux fois</Text> vers le bas depuis le haut de l'écran pour ouvrir le panneau rapide.</Text>
+                  </View>
+                  <View style={s.stepBox}>
+                    <Text style={s.stepNum}>3</Text>
+                    <Text style={s.stepText}>Touche <Text style={{ fontWeight: '700' }}>« Sortie multimédia »</Text> (ou l'icône de sortie sur le lecteur de musique).</Text>
+                  </View>
+
+                  {/* mini aperçu du panneau Samsung */}
+                  <View style={s.mock}>
+                    <Text style={s.mockTitle}>Sortie multimédia</Text>
+                    {(connectedAudio.length ? connectedAudio.slice(0, 2) : [{ name: 'Enceinte 1', address: 'a' }, { name: 'Enceinte 2', address: 'b' }]).map((d) => (
+                      <View key={d.address} style={s.mockRow}>
+                        <Text style={{ fontSize: 16 }}>🔊</Text>
+                        <Text numberOfLines={1} style={s.mockName}>{d.name}</Text>
+                        <View style={s.mockCheck}><Text style={{ color: '#000', fontWeight: '900', fontSize: 12 }}>✓</Text></View>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={s.stepBox}>
+                    <Text style={s.stepNum}>4</Text>
+                    <Text style={s.stepText}><Text style={{ fontWeight: '700' }}>Coche les deux enceintes.</Text> Reviens ici : l'encadré du haut doit afficher « ✓ Musique sur 2 enceintes ».</Text>
+                  </View>
+
                   <Text style={[s.hint, { marginTop: 10 }]}>
-                    Pour jouer sur 2 enceintes en même temps, même de marques différentes : connecte-les toutes les deux,
-                    touche le bouton ci-dessus et coche-les. Les Samsung gèrent jusqu'à 2 appareils (« Dual Audio »).
+                    Pas de cases à cocher ? Active d'abord « Dual Audio » : Réglages → Connexions → Bluetooth → ⋮ → Paramètres avancés.
+                    Maximum 2 enceintes en Bluetooth classique. Un léger écho est possible entre deux marques différentes dans la même pièce.
                   </Text>
+                  <ActionButton secondary label="Ouvrir les réglages Bluetooth" onPress={() => Native.btOpenSettings()} />
                 </View>
 
                 <Text style={s.subTitle}>Mes appareils</Text>
@@ -1927,6 +1984,20 @@ const s = StyleSheet.create({
   handle: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 10, marginBottom: 14 },
   brand: { color: '#fff', fontSize: 34, fontWeight: '800', letterSpacing: -0.5, marginBottom: 18 },
   glass: { backgroundColor: 'rgba(28,28,28,0.82)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.15)' },
+  stepBox: {
+    flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, padding: 12, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  stepNum: {
+    width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff',
+    textAlign: 'center', lineHeight: 26, fontWeight: '800', marginRight: 12, overflow: 'hidden',
+  },
+  stepText: { color: '#fff', fontSize: 14.5, lineHeight: 21, flex: 1 },
+  mock: { marginTop: 10, marginLeft: 38, padding: 12, borderRadius: 16, backgroundColor: '#e9e9ee' },
+  mockTitle: { color: '#111', fontWeight: '800', fontSize: 14, marginBottom: 6 },
+  mockRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  mockName: { color: '#111', fontSize: 14, flex: 1, marginLeft: 8 },
+  mockCheck: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
   btHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
   btClose: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   btCard: { backgroundColor: '#161616', borderRadius: 16, padding: 18, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
