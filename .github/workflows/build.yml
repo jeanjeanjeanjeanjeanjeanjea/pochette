@@ -41,6 +41,7 @@ jobs:
           cp app.json pochette/app.json
           mkdir -p pochette/assets
           cp icon.png adaptive-icon.png pochette/assets/
+          cp -r modules pochette/modules
 
       - name: Générer le projet Android
         working-directory: pochette
@@ -61,3 +62,4 @@ jobs:
           tag_name: apk-${{ github.run_number }}
           name: Pochette (version ${{ github.run_number }})
           files: Pochette.apk
+        
