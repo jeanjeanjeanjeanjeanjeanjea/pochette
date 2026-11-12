@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pochette",
     "slug": "pochette",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "default",
     "scheme": "pochette",
     "userInterfaceStyle": "dark",
@@ -13,8 +13,11 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0b0b0b"
-      }
+      },
+      "versionCode": 3
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }
